@@ -149,7 +149,9 @@ class Connect4Environment:
             action: Acción elegida por un agente.
             
         """
-       #
+       # termina el jugador que empezo segundo, entonces la ultima jugada va a estar en el primero 
+       # ultim ajugada: llena el tablero 
+       # chequear si termino el juego psot hacer la jugada entonces nunca llega a que vuelva el primero 
         # si hay 42 jugada scual seria el que deberia check hgame is over primero 
         # fijarse si priemro hay que check game is over o si primero haces la jugada directamnete 
         is_over,winner = check_game_over(self.game.state)
@@ -179,7 +181,12 @@ class Connect4Environment:
         Muestra visualmente el estado actual del tablero en la consola.
 
         """
-        pass
+        symbols = {0: ".", 1: "X", 2: "O"}  # símbolos para imprimir
+        print("\nTablero:")
+        for row in self.board:
+            print(" ".join(symbols[val] for val in row))
+        print("0 1 2 3 4 5 6")  # índices de columnas abajo
+        print()
 
 class DQN(nn.Module):
     def __init__(self, input_dim, output_dim): 
