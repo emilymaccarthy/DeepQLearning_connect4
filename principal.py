@@ -3,28 +3,26 @@ import torch.nn as nn
 import torch.nn.functional as F
 from agentes import Agent
 from utils import *
+import random
+import numpy as np
 
+# ==============================
+#  ESTADO DEL JUEGO
+# ==============================
 class Connect4State:
-    def __init__(self,n_rows=6,n_cols=7): 
+    def __init__(self, n_rows=6, n_cols=7): 
         """
-        Inicializa el estado del juego Connect4.
-        
-        Args:
-            Definir qué hace a un estado de Connect4.
+        Representa un snapshot del estado de Connect4.
+        Contiene el tablero, el jugador actual, y si terminó o no.
         """
-        self.board = create_board(n_rows, n_cols) #cambie que sea con atributos en ves d eun dict
-        self.current_player = 1
-        self.isOver = False
-        self.winner = None
-
-        pass
+        self.board = create_board(n_rows, n_cols)  # tablero vacío
+        self.current_player = 1                    # jugador que arranca
+        self.isOver = False                        # flag de fin de juego
+        self.winner = None                         # ganador (1, 2 o None)
 
     def copy(self):  
         """
-        Crea una copia profunda del estado actual.
-        
-        Returns:
-            Una nueva instancia de Connect4State con los mismos valores.
+        Crea una copia profunda del estado actual (nuevo objeto independiente).
         """
         new_state = Connect4State(self.board.shape[0], self.board.shape[1])
         new_state.board = np.copy(self.board)
@@ -35,64 +33,46 @@ class Connect4State:
 
     def update_state(self):
         """
-        Modifica las variables internas del estado luego de una jugada.
-
-        Args:
-            board 
-            la ultima jugada 
-            ... (_type_): _description_
-            ... (_type_): _description_
+        Verifica si el juego terminó después de la última jugada,
+        y actualiza current_player si no terminó.
         """
-        is_over, winner_player = check_game_over(self.board) #lo cambie para que funcione con los atributos
+        is_over, winner_player = check_game_over(self.board)
         if is_over:
             self.isOver = True
             self.winner = winner_player
         else:
+            # alterna el jugador
             self.current_player = 2 if self.current_player == 1 else 1
-
-        
 
     def __eq__(self, other):
         """
-        Compara si dos estados son iguales.
-        
-        Args:
-            other: Otro estado para comparar.
-            
-        Returns:
-            True si los estados son iguales, False en caso contrario.
+        Compara si dos estados son iguales (para hashing o debug).
         """
-        
         board_eq = np.array_equal(self.board, other.board)
         current_player_eq = self.current_player == other.current_player
         isOver_eq = self.isOver == other.isOver
-
-
         return board_eq and current_player_eq and isOver_eq
-        
 
     def __hash__(self): 
         """
-        Genera un hash único para el estado.
-        
-        Returns:
-            Hash del estado basado en el tablero y jugador actual.
+        Permite usar Connect4State como clave en diccionarios (Q-learning tabular).
         """
         return hash((tuple(self.board.flatten()), self.current_player, self.isOver))
-        return result
-
 
     def __repr__(self):
         """
-        Representación en string del estado.
-        
+        Representación string para imprimir fácilmente el estado.
         """
         return str(self.board) + '\n' + str(self.current_player) + '\n' + str(self.isOver)
 
+
+# ==============================
+#  AMBIENTE
+# ==============================
 class Connect4Environment:
     def __init__(self, rows=6, cols=7):
         """
-        Inicializa el ambiente del juego Connect4.
+        Ambiente de Connect4: contiene el estado del juego y la lógica de transiciones.
         """
         self.rows = rows
         self.cols = cols
@@ -102,55 +82,32 @@ class Connect4Environment:
 
     def reset(self):
         """
-        Reinicia el ambiente a su estado inicial.
+        Reinicia el juego a estado inicial y devuelve el estado.
         """
         self.game = Connect4State(self.rows, self.cols)
         self.done = False
         self.winner = None
-        return self.game.copy()  # CAMBIO: devuelve copia del estado
+        return self.game.copy()
 
     def available_actions(self):
         """
-        Obtiene las acciones válidas (columnas disponibles).
+        Devuelve lista de columnas válidas (no llenas).
         """
         board = self.game.board
         available_actions = []
-        for col in range(board.shape[1]):  
+        for col in range(board.shape[1]):
             if board[0][col] == 0:
                 available_actions.append(col)
         return available_actions
 
     def step(self, action):
         """
-        Ejecuta una acción y devuelve (nuevo_estado, reward, done, info).
+        Ejecuta una jugada (columna) y devuelve:
+        (nuevo_estado, reward, done, info)
         """
-        """
-       # termina el jugador que empezo segundo, entonces la ultima jugada va a estar en el primero 
-       # ultim ajugada: llena el tablero 
-       # chequear si termino el juego psot hacer la jugada entonces nunca llega a que vuelva el primero 
-        # si hay 42 jugada scual seria el que deberia check hgame is over primero 
-        # fijarse si priemro hay que check game is over o si primero haces la jugada directamnete 
-        is_over,winner = check_game_over(self.game.state)
-        if(is_over):
-            
-            return{
-                'nuevo_estado': 0,#pass,
-                'reward': 1,
-                'isOver': True,
-                'winner': winner  
-            }
-        else:
-            # Checkeamos que el action sea available-> asumimos que esta bien
-            insert_token(self.game.state.board,action, self.game.state.current_player)
-            #si lo es: lo ejecutamos chack
-            
-            #actualizamos el estado
-            self.game.update_state()
-            # devolvemos lo que nos pide
-            """
         insert_token(self.game.board, action, self.game.current_player)
 
-        # Chequear si terminó el juego
+        # chequeo si terminó
         is_over, winner = check_game_over(self.game.board)
 
         if is_over:
@@ -159,6 +116,7 @@ class Connect4Environment:
             self.done = True
             self.winner = winner
 
+            # asignación de recompensas
             if winner is None:   # empate
                 reward = 0
             elif winner == self.game.current_player:
@@ -169,13 +127,13 @@ class Connect4Environment:
             return self.game.copy(), reward, True, {"winner": winner}
 
         else:
-            # Si no terminó, cambiamos de jugador
+            # cambio de jugador
             self.game.current_player = 2 if self.game.current_player == 1 else 1
             return self.game.copy(), 0, False, {"winner": None}
 
     def render(self):
         """
-        Muestra el tablero en la consola.
+        Imprime el tablero en consola.
         """
         board = self.game.board
         symbols = {0: ".", 1: "X", 2: "O"}
@@ -186,58 +144,34 @@ class Connect4Environment:
         print()
 
 
+# ==============================
+#  RED DQN
+# ==============================
 class DQN(nn.Module):
     def __init__(self, input_dim, output_dim): 
         """
-        Inicializa la red neuronal DQN para el aprendizaje por refuerzo.
-        
-        Args:
-            input_dim: Dimensión de entrada (número de features del estado).
-            output_dim: Dimensión de salida (número de acciones posibles).
+        Red neuronal simple: mapea estado -> Q-value por acción.
         """
         super(DQN, self).__init__()
-        
-        # Definir capas densas: 
-        self.fc1 = nn.Linear(input_dim, 128)   # primera capa oculta
-        self.fc2 = nn.Linear(128, 128)         # segunda capa oculta
-        self.fc3 = nn.Linear(128, output_dim)  # salida: Q-value por acción
-        
-        pass
+        self.fc1 = nn.Linear(input_dim, 128)   # capa oculta 1
+        self.fc2 = nn.Linear(128, 128)         # capa oculta 2
+        self.fc3 = nn.Linear(128, output_dim)  # salida (Q por cada acción posible)
 
     def forward(self, x):
-        """
-        Pasa la entrada a través de la red neuronal.
-        
-        Args:
-            x: Tensor de entrada.
-            
-        Returns:
-            Tensor de salida con los valores Q para cada acción.
-        """
         x = F.relu(self.fc1(x))
         x = F.relu(self.fc2(x))
-        return self.fc3(x)
-        pass
+        return self.fc3(x)  # devuelve un vector de Q-values
 
+
+# ==============================
+#  AGENTE DQN
+# ==============================
 class DeepQLearningAgent:
     def __init__(self, state_shape, n_actions, device,
                  gamma, epsilon, epsilon_min, epsilon_decay,
                  lr, batch_size, memory_size, target_update_every): 
         """
-        Inicializa el agente de aprendizaje por refuerzo DQN.
-        
-        Args:
-            state_shape: Forma del estado (filas, columnas).
-            n_actions: Número de acciones posibles.
-            device: Dispositivo para computación ('cpu' o 'cuda').
-            gamma: Factor de descuento para recompensas futuras.
-            epsilon: Probabilidad inicial de exploración.
-            epsilon_min: Valor mínimo de epsilon.
-            epsilon_decay: Factor de decaimiento de epsilon.
-            lr: Tasa de aprendizaje.
-            batch_size: Tamaño del batch para entrenamiento.
-            memory_size: Tamaño máximo de la memoria de experiencias.
-            target_update_every: Frecuencia de actualización de la red objetivo.
+        Implementación de un agente que usa Deep Q-Learning.
         """
         self.state_shape = state_shape
         self.n_actions = n_actions
@@ -250,44 +184,33 @@ class DeepQLearningAgent:
         self.batch_size = batch_size
         self.memory_size = memory_size
         self.target_update_every = target_update_every
-        # self.memory = ReplayMemory(memory_size)
+
+        # memoria de experiencias (FIFO)
         self.memory = []
+
+        # dos redes: policy y target
         self.policy_net = DQN(state_shape[0] * state_shape[1], n_actions).to(device)
         self.target_net = DQN(state_shape[0] * state_shape[1], n_actions).to(device)
         self.target_net.load_state_dict(self.policy_net.state_dict())
-        self.target_net.eval()
+        self.target_net.eval()  # target no se entrena directamente
+
         self.optimizer = torch.optim.Adam(self.policy_net.parameters(), lr=lr)
         self.steps_done = 0
         self.episode_count = 0
-        
-        pass
 
     def preprocess(self, state):
         """
-        Convierte el estado del juego a un tensor de PyTorch.
-        
-        Args:
-            state: Estado del juego.
-            
-        Returns:
-            Tensor de PyTorch con el estado aplanado.
+        Convierte Connect4State -> tensor torch listo para la red.
         """
-        state_array = state.board.flatten()  # Aplanar el tablero
+        state_array = state.board.flatten()  
         state_tensor = torch.tensor(state_array, dtype=torch.float32).unsqueeze(0).to(self.device)
         return state_tensor
-    
-        pass
 
     def select_action(self, state, valid_actions): 
         """
-        Selecciona una acción usando la política epsilon-greedy.
-        
-        Args:
-            state: Estado actual del juego.
-            valid_actions: Lista de acciones válidas.
-            
-        Returns:
-            Índice de la acción seleccionada.
+        Política epsilon-greedy:
+        - Con prob epsilon: acción aleatoria válida.
+        - Con prob (1-epsilon): acción con mayor Q-value entre las válidas.
         """
         sample = np.random.rand()
         if sample < self.epsilon:
@@ -297,64 +220,91 @@ class DeepQLearningAgent:
             with torch.no_grad():
                 q_values = self.policy_net(state_tensor)
             q_values = q_values.cpu().numpy().flatten()
+            # filtrar solo acciones válidas
             q_values_valid = [(a, q_values[a]) for a in valid_actions]
             best_action = max(q_values_valid, key=lambda x: x[1])[0]
             return best_action
-        
-        pass
 
     def store_transition(self, s, a, r, s_next, done):
         """
-        Almacena una transición (estado, acción, recompensa, siguiente estado, terminado) en la memoria.
-        
-        Args:
-            s: Estado actual.
-            a: Acción tomada.
-            r: Recompensa obtenida.
-            s_next: Siguiente estado.
-            done: Si el episodio terminó.
+        Guarda (estado, acción, recompensa, siguiente estado, done) en memoria.
+        Si la memoria supera el límite, descarta la más vieja.
         """
-        
-        
-        pass
+        if len(self.memory) >= self.memory_size:
+            self.memory.pop(0)
+        self.memory.append((s, a, r, s_next, done))
 
     def train_step(self): 
         """
-        Ejecuta un paso de entrenamiento usando experiencias de la memoria.
-        
-        Returns:
-            Valor de la función de pérdida si se pudo entrenar, None en caso contrario.
+        Muestra un batch de memoria y entrena la policy_net.
         """
-        pass
+        if len(self.memory) < self.batch_size:
+            return None
+
+        # sample aleatorio
+        batch = random.sample(self.memory, self.batch_size)
+        states, actions, rewards, next_states, dones = zip(*batch)
+
+        # preparar tensores
+        states = torch.cat([self.preprocess(s) for s in states]).to(self.device)
+        actions = torch.tensor(actions, dtype=torch.int64).unsqueeze(1).to(self.device)
+        rewards = torch.tensor(rewards, dtype=torch.float32).unsqueeze(1).to(self.device)
+        next_states = torch.cat([self.preprocess(s) for s in next_states]).to(self.device)
+        dones = torch.tensor(dones, dtype=torch.float32).unsqueeze(1).to(self.device)
+
+        # Q-values de las acciones ejecutadas
+        q_values = self.policy_net(states).gather(1, actions)
+
+        # targets usando la target_net
+        with torch.no_grad():
+            next_q_values = self.target_net(next_states).max(1)[0].unsqueeze(1)
+            target_q_values = rewards + (self.gamma * next_q_values * (1 - dones))
+
+        # pérdida MSE
+        loss = F.mse_loss(q_values, target_q_values)
+
+        # backprop
+        self.optimizer.zero_grad()
+        loss.backward()
+        self.optimizer.step()
+
+        # actualización de target_net cada N episodios
+        if self.episode_count % self.target_update_every == 0:
+            self.target_net.load_state_dict(self.policy_net.state_dict())
+
+        return loss.item()
 
     def update_epsilon(self):
         """
-        Actualiza el valor de epsilon para reducir la exploración gradualmente.
+        Decaimiento de epsilon (exploración -> explotación).
         """
-        pass
+        self.epsilon = max(self.epsilon_min, self.epsilon * self.epsilon_decay)
+        self.episode_count += 1
 
+
+# ==============================
+#  AGENTE ENTRENADO
+# ==============================
 class TrainedAgent(Agent):
     def __init__(self, model_path: str, state_shape: tuple, n_actions: int, device='cpu'):
         """
-        Inicializa un agente DQN pre-entrenado.
-        
-        Args:
-            model_path: Ruta al archivo del modelo entrenado.
-            state_shape: Forma del estado del juego.
-            n_actions: Número de acciones posibles.
-            device: Dispositivo para computación.
+        Carga un agente DQN ya entrenado desde archivo.
         """
-        pass
+        self.device = device
+        self.n_actions = n_actions
+        self.policy_net = DQN(state_shape[0] * state_shape[1], n_actions).to(device)
+        self.policy_net.load_state_dict(torch.load(model_path, map_location=device))
+        self.policy_net.eval()
 
     def play(self, state, valid_actions): 
         """
-        Selecciona la mejor acción según el modelo entrenado.
-        
-        Args:
-            state: Estado actual del juego.
-            valid_actions: Lista de acciones válidas.
-            
-        Returns:
-            Índice de la mejor acción según el modelo.
+        Selecciona la acción óptima (greedy) según la red entrenada.
         """
-        pass
+        state_array = state.board.flatten()
+        state_tensor = torch.tensor(state_array, dtype=torch.float32).unsqueeze(0).to(self.device)
+        with torch.no_grad():
+            q_values = self.policy_net(state_tensor)
+        q_values = q_values.cpu().numpy().flatten()
+        q_values_valid = [(a, q_values[a]) for a in valid_actions]
+        best_action = max(q_values_valid, key=lambda x: x[1])[0]
+        return best_action
