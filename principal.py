@@ -10,17 +10,11 @@ class Connect4State:
         Args:
             Definir qué hace a un estado de Connect4.
         """
-        current_player = 1
-        board = create_board(n_rows,n_cols)
-        self.state = {
-            'board': board,
-            'current_player' : current_player,
-            'isOver': False,
-            'winner': None
-        }
-        
-        
-        
+        self.board = create_board(n_rows, n_cols) #cambie que sea con atributos en ves d eun dict
+        self.current_player = 1
+        self.isOver = False
+        self.winner = None
+
         pass
 
     def copy(self):  
@@ -42,15 +36,13 @@ class Connect4State:
             ... (_type_): _description_
             ... (_type_): _description_
         """
-        is_over, winner_player = check_game_over(self.state.board)
-        if(is_over):
-            self.state.isOver = True
-            self.state.winner = winner_player
+        is_over, winner_player = check_game_over(self.board) #lo cambie para que funcione con los atributos
+        if is_over:
+            self.isOver = True
+            self.winner = winner_player
         else:
-            if(self.state.current_player == 1):
-              self.state.current_player = 2  
-            else:
-              self.state.current_player = 1
+            self.current_player = 2 if self.current_player == 1 else 1
+
         
 
     def __eq__(self, other):
@@ -64,9 +56,10 @@ class Connect4State:
             True si los estados son iguales, False en caso contrario.
         """
         
-        board_eq = np.array_equal(self.state.board, other.state.board)
-        current_player_eq = self.state.current_player == other.state.current_player
-        isOver_eq = self.state.isOver == other.state.isOver
+        board_eq = np.array_equal(self.board, other.board)
+        current_player_eq = self.current_player == other.current_player
+        isOver_eq = self.isOver == other.isOver
+
 
         return board_eq and current_player_eq and isOver_eq
         
@@ -78,8 +71,7 @@ class Connect4State:
         Returns:
             Hash del estado basado en el tablero y jugador actual.
         """
-        input_hash = str(self.state.board)+str(self.state.current_player)+str(self.state.isOver)
-        result = hash_function(input_hash) # To do
+        return hash((tuple(self.board.flatten()), self.current_player, self.isOver))
         return result
 
 
@@ -88,66 +80,43 @@ class Connect4State:
         Representación en string del estado.
         
         """
-        return str(self.state.board)+'\n'+str(self.state.current_player)+'\n'+str(self.state.isOver)
+        return str(self.board) + '\n' + str(self.current_player) + '\n' + str(self.isOver)
 
 class Connect4Environment:
-    def __init__(self):
+    def __init__(self, rows=6, cols=7):
         """
         Inicializa el ambiente del juego Connect4.
-        
-        Args:
-            1 o 2 jugadores Definir las variables de instancia de un ambiente de Connect4
-
-        """        
-        self.rows = 6
-        self.cols = 7
-        self.game = Connect4State(self.rows,self.cols)
-        # game.state
-
+        """
+        self.rows = rows
+        self.cols = cols
+        self.game = Connect4State(self.rows, self.cols)
         self.done = False
         self.winner = None
 
     def reset(self):
         """
-        Reinicia el ambiente a su estado inicial para volver a realizar un episodio.
-        
+        Reinicia el ambiente a su estado inicial.
         """
-        self.rows = 6
-        self.cols = 7
-        self.game = Connect4State(self.rows,self.cols)
-        # game.state
-
+        self.game = Connect4State(self.rows, self.cols)
         self.done = False
         self.winner = None
-
-        return self.game.state
-        
+        return self.game.copy()  # CAMBIO: devuelve copia del estado
 
     def available_actions(self):
         """
-        Obtiene las acciones válidas (columnas disponibles) en el estado actual.
-        
-        Returns:
-            Lista de índices de columnas donde se puede colocar una ficha.
+        Obtiene las acciones válidas (columnas disponibles).
         """
-        board = self.game.state.board
-        available_actions = np.array([])
-        for col in board.shape[1]: # num de columnas
-            if(board[0][col] == 0):
-                np.append(available_actions,col)
+        board = self.game.board
+        available_actions = []
+        for col in range(board.shape[1]):  
+            if board[0][col] == 0:
+                available_actions.append(col)
         return available_actions
-    
 
     def step(self, action):
         """
-        Ejecuta una acción.
-        El estado es modificado acorde a la acción y su interacción con el ambiente.
-        Devuelve la tupla: nuevo_estado, reward, terminó_el_juego?, ganador
-        Si terminó_el_juego==false, entonces ganador es None.
-        
-        Args:
-            action: Acción elegida por un agente.
-            
+        Ejecuta una acción y devuelve (nuevo_estado, reward, done, info).
+        """
         """
        # termina el jugador que empezo segundo, entonces la ultima jugada va a estar en el primero 
        # ultim ajugada: llena el tablero 
@@ -171,22 +140,44 @@ class Connect4Environment:
             #actualizamos el estado
             self.game.update_state()
             # devolvemos lo que nos pide
-            
-            
-        
-        pass
+            """
+        insert_token(self.game.board, action, self.game.current_player)
+
+        # Chequear si terminó el juego
+        is_over, winner = check_game_over(self.game.board)
+
+        if is_over:
+            self.game.isOver = True
+            self.game.winner = winner
+            self.done = True
+            self.winner = winner
+
+            if winner is None:   # empate
+                reward = 0
+            elif winner == self.game.current_player:
+                reward = 1
+            else:
+                reward = -1
+
+            return self.game.copy(), reward, True, {"winner": winner}
+
+        else:
+            # Si no terminó, cambiamos de jugador
+            self.game.current_player = 2 if self.game.current_player == 1 else 1
+            return self.game.copy(), 0, False, {"winner": None}
 
     def render(self):
         """
-        Muestra visualmente el estado actual del tablero en la consola.
-
+        Muestra el tablero en la consola.
         """
-        symbols = {0: ".", 1: "X", 2: "O"}  # símbolos para imprimir
+        board = self.game.board
+        symbols = {0: ".", 1: "X", 2: "O"}
         print("\nTablero:")
-        for row in self.board:
+        for row in board:
             print(" ".join(symbols[val] for val in row))
-        print("0 1 2 3 4 5 6")  # índices de columnas abajo
+        print("0 1 2 3 4 5 6")
         print()
+
 
 class DQN(nn.Module):
     def __init__(self, input_dim, output_dim): 
