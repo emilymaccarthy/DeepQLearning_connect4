@@ -1,4 +1,6 @@
+import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from agentes import Agent
 from utils import *
 
@@ -193,6 +195,13 @@ class DQN(nn.Module):
             input_dim: Dimensión de entrada (número de features del estado).
             output_dim: Dimensión de salida (número de acciones posibles).
         """
+        super(DQN, self).__init__()
+        
+        # Definir capas densas: 
+        self.fc1 = nn.Linear(input_dim, 128)   # primera capa oculta
+        self.fc2 = nn.Linear(128, 128)         # segunda capa oculta
+        self.fc3 = nn.Linear(128, output_dim)  # salida: Q-value por acción
+        
         pass
 
     def forward(self, x):
@@ -205,6 +214,9 @@ class DQN(nn.Module):
         Returns:
             Tensor de salida con los valores Q para cada acción.
         """
+        x = F.relu(self.fc1(x))
+        x = F.relu(self.fc2(x))
+        return self.fc3(x)
         pass
 
 class DeepQLearningAgent:
@@ -227,6 +239,27 @@ class DeepQLearningAgent:
             memory_size: Tamaño máximo de la memoria de experiencias.
             target_update_every: Frecuencia de actualización de la red objetivo.
         """
+        self.state_shape = state_shape
+        self.n_actions = n_actions
+        self.device = device
+        self.gamma = gamma
+        self.epsilon = epsilon
+        self.epsilon_min = epsilon_min
+        self.epsilon_decay = epsilon_decay
+        self.lr = lr
+        self.batch_size = batch_size
+        self.memory_size = memory_size
+        self.target_update_every = target_update_every
+        # self.memory = ReplayMemory(memory_size)
+        self.memory = []
+        self.policy_net = DQN(state_shape[0] * state_shape[1], n_actions).to(device)
+        self.target_net = DQN(state_shape[0] * state_shape[1], n_actions).to(device)
+        self.target_net.load_state_dict(self.policy_net.state_dict())
+        self.target_net.eval()
+        self.optimizer = torch.optim.Adam(self.policy_net.parameters(), lr=lr)
+        self.steps_done = 0
+        self.episode_count = 0
+        
         pass
 
     def preprocess(self, state):
@@ -239,6 +272,10 @@ class DeepQLearningAgent:
         Returns:
             Tensor de PyTorch con el estado aplanado.
         """
+        state_array = state.board.flatten()  # Aplanar el tablero
+        state_tensor = torch.tensor(state_array, dtype=torch.float32).unsqueeze(0).to(self.device)
+        return state_tensor
+    
         pass
 
     def select_action(self, state, valid_actions): 
@@ -252,6 +289,18 @@ class DeepQLearningAgent:
         Returns:
             Índice de la acción seleccionada.
         """
+        sample = np.random.rand()
+        if sample < self.epsilon:
+            return np.random.choice(valid_actions)
+        else:
+            state_tensor = self.preprocess(state)
+            with torch.no_grad():
+                q_values = self.policy_net(state_tensor)
+            q_values = q_values.cpu().numpy().flatten()
+            q_values_valid = [(a, q_values[a]) for a in valid_actions]
+            best_action = max(q_values_valid, key=lambda x: x[1])[0]
+            return best_action
+        
         pass
 
     def store_transition(self, s, a, r, s_next, done):
@@ -265,6 +314,8 @@ class DeepQLearningAgent:
             s_next: Siguiente estado.
             done: Si el episodio terminó.
         """
+        
+        
         pass
 
     def train_step(self): 
