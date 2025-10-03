@@ -24,7 +24,12 @@ class Connect4State:
         Returns:
             Una nueva instancia de Connect4State con los mismos valores.
         """
-        return np.copy(self.state)
+        new_state = Connect4State(self.board.shape[0], self.board.shape[1])
+        new_state.board = np.copy(self.board)
+        new_state.current_player = self.current_player
+        new_state.isOver = self.isOver
+        new_state.winner = self.winner
+        return new_state
 
     def update_state(self):
         """
@@ -205,7 +210,7 @@ class DQN(nn.Module):
 class DeepQLearningAgent:
     def __init__(self, state_shape, n_actions, device,
                  gamma, epsilon, epsilon_min, epsilon_decay,
-                 lr, batch_size, memory_size target_update_every): 
+                 lr, batch_size, memory_size, target_update_every): 
         """
         Inicializa el agente de aprendizaje por refuerzo DQN.
         

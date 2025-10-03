@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from random import choice
 import utils
-import numpy as
+import numpy as np
 # import Guid
 
 class Agent(ABC):
